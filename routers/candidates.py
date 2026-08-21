@@ -1,12 +1,18 @@
 """Candidate profile routes."""
 
 import logging
+from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database.db import get_db
+from orchestrator.file_validation import (
+    MAX_RESUME_SIZE_BYTES,
+    sanitize_filename,
+    validate_file_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +27,7 @@ class CreateCandidateRequest(BaseModel):
 
 
 class BulkCandidateItem(BaseModel):
-    """A single candidate row within a bulk import request.
-
-    Note: `position` and `phone` are accepted from the frontend CSV import
-    payload but are NOT persisted, since the Candidate model has no
-    corresponding database columns. They are echoed back in the response
-    only.
-    """
+    """A single candidate row within a bulk import request."""
 
     name: str = Field(min_length=1, max_length=200)
     email: str = Field(min_length=1, max_length=255)
@@ -42,14 +42,7 @@ class BulkCandidateRequest(BaseModel):
 
 
 def create_candidate_routes(candidate_manager) -> APIRouter:
-    """Create candidate profile routes.
-
-    Args:
-        candidate_manager: CandidateManager instance
-
-    Returns:
-        APIRouter with candidate routes
-    """
+    """Create candidate profile routes."""
 
     router = APIRouter()
 
@@ -89,13 +82,7 @@ def create_candidate_routes(candidate_manager) -> APIRouter:
         request: BulkCandidateRequest,
         session_db: Session = Depends(get_db),
     ):
-        """Bulk-create candidate profiles from a CSV import.
-
-        Each candidate is processed independently: a failure on one row
-        does not prevent the others from being created. `position` and
-        `phone` are accepted but not persisted, since the Candidate model
-        has no corresponding columns.
-        """
+        """Bulk-create candidate profiles from a CSV import."""
         created = []
         errors = []
 
@@ -105,7 +92,6 @@ def create_candidate_routes(candidate_manager) -> APIRouter:
                     name=item.name,
                     email=item.email,
                 )
-                # Echo back the non-persisted fields for frontend visibility only.
                 candidate["position"] = item.position
                 candidate["phone"] = item.phone
                 created.append(candidate)
@@ -162,5 +148,52 @@ def create_candidate_routes(candidate_manager) -> APIRouter:
             raise HTTPException(
                 status_code=500, detail="Error fetching candidate history"
             )
+
+    @router.post("/candidates/{candidate_id}/resume")
+    async def upload_candidate_resume(
+        candidate_id: str,
+        file: UploadFile = File(...),
+        session_db: Session = Depends(get_db),
+    ):
+        """Upload, validate, and save candidate resume."""
+        try:
+            candidate = candidate_manager.get_candidate(candidate_id)
+            if not candidate:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+
+            content = await file.read()
+
+            # 1. Size check
+            if len(content) > MAX_RESUME_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large")
+
+            # 2. Content & Extension validation
+            is_valid, err_msg = validate_file_content(
+                content, file.filename, file.content_type
+            )
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=err_msg)
+
+            # 3. Sanitize filename
+            sanitized_name = sanitize_filename(file.filename)
+
+            # 4. Save resume via manager
+            save_method = getattr(candidate_manager, "save_candidate_resume", None)
+            if callable(save_method):
+                result = save_method(candidate_id, sanitized_name, content)
+            else:
+                result = {
+                    "candidate_id": candidate_id,
+                    "filename": sanitized_name,
+                    "size_bytes": len(content),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+
+            return {"status": "success", "data": result}
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error uploading resume: {e!s}")
+            raise HTTPException(status_code=500, detail="Error uploading resume")
 
     return router

@@ -44,7 +44,7 @@ from config import (
     get_settings,
 )
 from database.db import engine, get_db
-from database.models import Base, Candidate, InterviewSession
+from database.models import Candidate, InterviewSession
 from metrics.prometheus_metrics import (
     POSTGRES_HEALTH,
     REDIS_HEALTH,
@@ -2408,7 +2408,7 @@ async def get_dashboard():
             os.path.dirname(__file__), "..", "monitoring", "dashboard.html"
         )
 
-        if os.path.exists(dashboard_path):
+        if os.path.exists(dashboard_path):  # noqa: ASYNC240
             with open(dashboard_path, encoding="utf-8") as f:
                 html_content = f.read()
 

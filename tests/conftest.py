@@ -14,7 +14,7 @@ os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("POSTGRES_DB", "ai_interview_db")
 os.environ.setdefault("POSTGRES_USER", "postgres")
 os.environ.setdefault("POSTGRES_PASSWORD", "postgres")
-os.environ.setdefault("API_TOKEN", "ci-test-token")
+os.environ["API_TOKEN"] = "ci-test-token"
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "10000")
 
 os.environ["OTEL_SDK_DISABLED"] = "true"

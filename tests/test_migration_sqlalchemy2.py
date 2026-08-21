@@ -30,6 +30,7 @@ def db_session(postgres_container):
     )
     # Clean database before test
     Base.metadata.drop_all(engine)
+    # Then create fresh tables
     Base.metadata.create_all(engine)
 
     TestingSessionLocal = sessionmaker(bind=engine)
@@ -39,6 +40,7 @@ def db_session(postgres_container):
         yield session
     finally:
         session.close()
+        # Clean up after test
         Base.metadata.drop_all(engine)
         engine.dispose()
 

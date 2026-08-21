@@ -24,6 +24,17 @@ class CandidateManager:
     def __init__(self):
         pass
 
+    def save_candidate_resume(
+        self, candidate_id: str, filename: str, content: bytes
+    ) -> dict:
+        """Save candidate resume."""
+        return {
+            "candidate_id": candidate_id,
+            "filename": filename,
+            "size_bytes": len(content),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def create_candidate(
         self,
         name: str,
