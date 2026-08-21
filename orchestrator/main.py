@@ -23,8 +23,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import anyio
 from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -2408,13 +2410,8 @@ async def get_dashboard():
             os.path.dirname(__file__), "..", "monitoring", "dashboard.html"
         )
 
-        if os.path.exists(dashboard_path):
-            with open(dashboard_path, encoding="utf-8") as f:
-                html_content = f.read()
-
-            from fastapi.responses import HTMLResponse
-
-            return HTMLResponse(content=html_content)
+        if await anyio.Path(dashboard_path).exists():
+            return FileResponse(dashboard_path, media_type="text/html")
         raise HTTPException(status_code=404, detail="Dashboard HTML not found")
     except HTTPException:
         raise
